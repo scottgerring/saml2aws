@@ -3,7 +3,9 @@ package commands
 import (
 	b64 "encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"os/user"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -67,10 +69,23 @@ func Login(loginFlags *flags.LoginExecFlags) error {
 
 	fmt.Printf("Authenticating as %s ...\n", loginDetails.Username)
 
-	samlAssertion, err := provider.Authenticate(loginDetails)
-	if err != nil {
-		return errors.Wrap(err, "error authenticating to IdP")
+	// Do we have a saml token saved?
+	currentUser, _ := user.Current()
+	samlFilePath := currentUser.HomeDir + "/.saml2aws_assertion"
+	existingSamlAssertion, err := ioutil.ReadFile(samlFilePath)
+	samlAssertion := ""
+	if err == nil {
+		samlAssertion = string(existingSamlAssertion)
+	} else {
+		samlAssertion, err = provider.Authenticate(loginDetails)
+		if err != nil {
+			return errors.Wrap(err, "error authenticating to IdP")
 
+		}
+		err = ioutil.WriteFile(samlFilePath, []byte(samlAssertion), 0644)
+		if err != nil {
+			return errors.Wrap(err, "Failed writing saml assertion to file")
+		}
 	}
 
 	if samlAssertion == "" {
